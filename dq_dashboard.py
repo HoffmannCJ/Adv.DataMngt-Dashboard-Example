@@ -43,23 +43,34 @@ with col1:
 
 #-------------------- Datenqualitätsprüfungen (NICHT TEIL DER HAUPTAUFGABE) ------------------#
 # GE-Setup linke Spalte: Umgebung erstellen, df registrieren, Batch (Daten Momentaufnahme) definieren
-    context = gx.get_context()
-    data_asset = context.data_sources.add_pandas(name="transactions").add_dataframe_asset(name="transactions_asset")
-    batch = data_asset.add_batch_definition_whole_dataframe("transactions_batch").get_batch(
-        batch_parameters={"dataframe": df}
-    )
+# Neuer GE-Code für EphemeralDataContext (ohne data_sources)
 
-# Konkrete Regeln für die Datenqualitätsprüfungen definieren
-# z.B. Keine NULL-Werte in "Transaction ID", "Transaction ID" ist eindeutig etc. siehe Regel
-# Regeln sind frei ausgedacht, weil nicht Teil der Hauptaufgabe
-    suite = gx.ExpectationSuite(name="transaction_suite")
-    suite.add_expectation(gx.expectations.ExpectColumnValuesToNotBeNull(column="Transaction ID"))
-    suite.add_expectation(gx.expectations.ExpectColumnValuesToBeUnique(column="Transaction ID"))
-    suite.add_expectation(gx.expectations.ExpectColumnValuesToBeBetween(column="Quantity", min_value=1, max_value=10))
-    suite.add_expectation(gx.expectations.ExpectColumnValuesToBeBetween(column="Total Spent", min_value=0, strict_min=True))
-    suite.add_expectation(gx.expectations.ExpectColumnValuesToBeInSet(column="Payment Method", value_set=["Credit Card", "Cash", "Digital Wallet"]))
-    suite.add_expectation(gx.expectations.ExpectColumnValuesToMatchRegex(column="Transaction Date", regex=r"^\d{4}-\d{2}-\d{2}$"))
-    context.suites.add(suite)
+    # Neuer GE-Code für EphemeralDataContext (ohne data_sources)
+    context = gx.get_context() 
+
+    # Erstelle eine ExpectationSuite (falls noch nicht vorhanden)
+    suite_name = "transaction_suite"
+    try:
+        suite = context.get_expectation_suite(suite_name)
+    except gx.exceptions.DataContextError:
+        suite = gx.ExpectationSuite(name=suite_name)
+
+    # Füge Regeln hinzu (wenn noch nicht drin)
+    if not suite.expectations:
+        suite.add_expectation(gx.expectations.ExpectColumnValuesToNotBeNull(column="Transaction ID"))
+        suite.add_expectation(gx.expectations.ExpectColumnValuesToBeUnique(column="Transaction ID"))
+        suite.add_expectation(gx.expectations.ExpectColumnValuesToBeBetween(column="Quantity", min_value=1, max_value=10))
+        suite.add_expectation(gx.expectations.ExpectColumnValuesToBeBetween(column="Total Spent", min_value=0, strict_min=True))
+        suite.add_expectation(gx.expectations.ExpectColumnValuesToBeInSet(column="Payment Method", value_set=["Credit Card", "Cash", "Digital Wallet"]))
+        suite.add_expectation(gx.expectations.ExpectColumnValuesToMatchRegex(column="Transaction Date", regex=r"^\d{4}-\d{2}-\d{2}$"))
+        context.save_expectation_suite(suite)
+
+    # Erzeuge Validator direkt aus DataFrame & Suite
+    validator = gx.from_pandas(df, expectation_suite=suite)
+
+    # Validieren
+    results_dict = validator.validate().to_json_dict()
+
 
 # Der Validator prüft Batch anhand der Regeln
 # Das Ergebnis (success/fail, Fehleranzahlen) wird als JSON Struktur gespeichert
