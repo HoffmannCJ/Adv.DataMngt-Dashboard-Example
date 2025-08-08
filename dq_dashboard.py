@@ -53,10 +53,11 @@ with col1:
     try:
         suite = context.get_expectation_suite(suite_name)
     except gx.exceptions.DataContextError:
-        suite = gx.ExpectationSuite(name=suite_name)
+        context.create_expectation_suite(suite_name)
+        suite = context.get_expectation_suite(suite_name)
 
-    # Füge Regeln hinzu (wenn noch nicht drin)
-    if not suite.expectations:
+    # Falls Suite leer, füge Erwartungen hinzu
+    if len(suite.expectations) == 0:
         suite.add_expectation(gx.expectations.ExpectColumnValuesToNotBeNull(column="Transaction ID"))
         suite.add_expectation(gx.expectations.ExpectColumnValuesToBeUnique(column="Transaction ID"))
         suite.add_expectation(gx.expectations.ExpectColumnValuesToBeBetween(column="Quantity", min_value=1, max_value=10))
