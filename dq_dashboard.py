@@ -7,6 +7,9 @@ import kagglehub                    # Download von Datensätzen via KaggleHub
 import shutil                       # Datei- und Ordneroperationen
 import os                           # Zugriff auf Betriebssystemfunktionen
 
+from great_expectations.data_context import EphemeralDataContext
+from great_expectations.core.expectation_suite import ExpectationSuite
+from great_expectations.core.batch import RuntimeBatchRequest
 
 # Dataset direkt als DataFrame laden
 # Download latest version
@@ -44,19 +47,21 @@ with col1:
 #-------------------- Datenqualitätsprüfungen (NICHT TEIL DER HAUPTAUFGABE) ------------------#
 # GE-Setup linke Spalte: Umgebung erstellen, df registrieren, Batch (Daten Momentaufnahme) definieren
 # Neuer GE-Code für EphemeralDataContext (ohne data_sources)
+# Konfiguriere GE Ephemeral Context (für Online Streamlit)
+    context = gx.get_context()
+    data_asset = context.data_sources.add_pandas(name="transactions").add_dataframe_asset(name="transactions_asset")
+    batch = data_asset.add_batch_definition_whole_dataframe("transactions_batch").get_batch(
+        batch_parameters={"dataframe": df}
+    )
 
-    # Neuer GE-Code für EphemeralDataContext (ohne data_sources)
-    context = gx.get_context() 
-
-    # Erstelle eine ExpectationSuite (falls noch nicht vorhanden)
+    # Erwartungssuite definieren
     suite_name = "transaction_suite"
     try:
         suite = context.get_expectation_suite(suite_name)
-    except gx.exceptions.DataContextError:
-        context.create_expectation_suite(suite_name)
-        suite = context.get_expectation_suite(suite_name)
+    except Exception:
+        suite = ExpectationSuite(suite_name)
 
-    # Falls Suite leer, füge Erwartungen hinzu
+    # Erwartungen hinzufügen, falls leer
     if len(suite.expectations) == 0:
         suite.add_expectation(gx.expectations.ExpectColumnValuesToNotBeNull(column="Transaction ID"))
         suite.add_expectation(gx.expectations.ExpectColumnValuesToBeUnique(column="Transaction ID"))
@@ -64,19 +69,10 @@ with col1:
         suite.add_expectation(gx.expectations.ExpectColumnValuesToBeBetween(column="Total Spent", min_value=0, strict_min=True))
         suite.add_expectation(gx.expectations.ExpectColumnValuesToBeInSet(column="Payment Method", value_set=["Credit Card", "Cash", "Digital Wallet"]))
         suite.add_expectation(gx.expectations.ExpectColumnValuesToMatchRegex(column="Transaction Date", regex=r"^\d{4}-\d{2}-\d{2}$"))
-        context.save_expectation_suite(suite)
-
-    # Erzeuge Validator direkt aus DataFrame & Suite
-    validator = gx.from_pandas(df, expectation_suite=suite)
-
-    # Validieren
-    results_dict = validator.validate().to_json_dict()
 
 
-# Der Validator prüft Batch anhand der Regeln
-# Das Ergebnis (success/fail, Fehleranzahlen) wird als JSON Struktur gespeichert
-# Anahnd der Tests können Kennzahlen festgehalten werden, die für weitere Visualisierungen dienen
-    validator = context.get_validator(batch=batch, expectation_suite=suite) 
+    # Validator initialisieren und validieren
+    validator = context.get_validator(batch=batch, expectation_suite=suite)
     results_dict = validator.validate().to_json_dict()
     error_records = sum(res["result"].get("unexpected_count", 0) for res in results_dict["results"])  # Zählt die Gesamtzahl der abweichenden Werte
     success_count = sum(res.get("success", False) for res in results_dict["results"])  # Zählt, wie viele Prüfungen erfolgreich waren
@@ -103,12 +99,6 @@ with col1:
         ("expect_column_values_to_match_regex", "Transaction Date"): "Datum YYYY-MM-DD",
     }
 
-
-
-
-
-
- 
 
     test_results = [
             {
