@@ -1,67 +1,47 @@
+import pandas as pd
+import streamlit as st
+import great_expectations as gx
+import plotly.graph_objects as go
 
-import pandas as pd                 # Für Datenanalyse und -manipulation (Umgang mit DataFrames)
-import streamlit as st              # Für die Erstellung von Webanwendungen im Bereich Data Science
-import great_expectations as gx     # Für Datenqualitätsprüfungen und Validierungen von Datensätzen
-import plotly.graph_objects as go   # Für interaktive Diagramme und Visualisierungen (Graph Objects)
-import kagglehub                    # Download von Datensätzen via KaggleHub
-import shutil                       # Datei- und Ordneroperationen
-import os                           # Zugriff auf Betriebssystemfunktionen
-
-from great_expectations.data_context import EphemeralDataContext
 from great_expectations.core.expectation_suite import ExpectationSuite
-from great_expectations.core.batch import RuntimeBatchRequest
 
-# Dataset direkt als DataFrame laden
-# Download latest version
-path = kagglehub.dataset_download("ahmedmohamed2003/cafe-sales-dirty-data-for-cleaning-training")
-notebook_dir = os.getcwd()
-for root, dirs, files in os.walk(path):
-    for file in files:
-        src_file = os.path.join(root, file)
-        dst_file = os.path.join(notebook_dir, file)
-        shutil.copy2(src_file, dst_file)
+# ------------------- CSV-Datei direkt laden ---------------------- #
+# Stelle sicher, dass die Datei im gleichen Ordner liegt oder Pfad anpassen
 df = pd.read_csv("dirty_cafe_sales.csv", sep=",")
 
-df["Total Spent"] = pd.to_numeric(df["Total Spent"], errors="coerce") # Werte konvergiert, weil z.B. richtige Werte nur nicht python konform --> DQ
+df["Total Spent"] = pd.to_numeric(df["Total Spent"], errors="coerce")
 df["Quantity"] = pd.to_numeric(df["Quantity"], errors="coerce")
 
 
-
 # ------------------------------ Streamlit-Seitenkonfiguration --------------------------------#
-st.set_page_config(page_title="Datenqualitäts-Dashboard", layout="wide") # Breite des Dashboards auf volle Breite setzen
-st.markdown("### Datenqualitätsdashboard für einen Datensatz") # Titel des Dashboards am Anfang der Seite
+st.set_page_config(page_title="Datenqualitäts-Dashboard", layout="wide")
+st.markdown("### Datenqualitätsdashboard für einen Datensatz")
 
 # ----------------------------------- Layout Unterteilung  ------------------------------------#
-col1, _, col2 = st.columns([47, 6, 47]) # Erstellung zwei Spalten mit Abstand dazwischen
+col1, _, col2 = st.columns([47, 6, 47])
 
-# Inhalt linke Spalte
 with col1:
     st.markdown("""
     #### Rohdaten Beschreibung:
     Der Datensatz enthält **10.000** Zeilen mit synthetischen Daten, die Verkaufstransaktionen in einem Café darstellen.
     Dieser Datensatz ist absichtlich „unsauber“ und enthält fehlende Werte, inkonsistente Daten und Fehler, um ein realistisches Szenario für das Dashboard zu schaffen.
     """)
-    st.dataframe(df, height=120) #Höhe minimieren, damit nur Vorschaudaten angezeigt werden
+    st.dataframe(df, height=120)
 
 
-#-------------------- Datenqualitätsprüfungen (NICHT TEIL DER HAUPTAUFGABE) ------------------#
-# GE-Setup linke Spalte: Umgebung erstellen, df registrieren, Batch (Daten Momentaufnahme) definieren
-# Neuer GE-Code für EphemeralDataContext (ohne data_sources)
-# Konfiguriere GE Ephemeral Context (für Online Streamlit)
+    # Datenqualitätsprüfungen
     context = gx.get_context()
     data_asset = context.data_sources.add_pandas(name="transactions").add_dataframe_asset(name="transactions_asset")
     batch = data_asset.add_batch_definition_whole_dataframe("transactions_batch").get_batch(
         batch_parameters={"dataframe": df}
     )
 
-    # Erwartungssuite definieren
     suite_name = "transaction_suite"
     try:
         suite = context.get_expectation_suite(suite_name)
     except Exception:
         suite = ExpectationSuite(suite_name)
 
-    # Erwartungen hinzufügen, falls leer
     if len(suite.expectations) == 0:
         suite.add_expectation(gx.expectations.ExpectColumnValuesToNotBeNull(column="Transaction ID"))
         suite.add_expectation(gx.expectations.ExpectColumnValuesToBeUnique(column="Transaction ID"))
@@ -70,16 +50,13 @@ with col1:
         suite.add_expectation(gx.expectations.ExpectColumnValuesToBeInSet(column="Payment Method", value_set=["Credit Card", "Cash", "Digital Wallet"]))
         suite.add_expectation(gx.expectations.ExpectColumnValuesToMatchRegex(column="Transaction Date", regex=r"^\d{4}-\d{2}-\d{2}$"))
 
-
-    # Validator initialisieren und validieren
     validator = context.get_validator(batch=batch, expectation_suite=suite)
     results_dict = validator.validate().to_json_dict()
-    error_records = sum(res["result"].get("unexpected_count", 0) for res in results_dict["results"])  # Zählt die Gesamtzahl der abweichenden Werte
-    success_count = sum(res.get("success", False) for res in results_dict["results"])  # Zählt, wie viele Prüfungen erfolgreich waren
-    total_checks = len(results_dict["results"])  # Ermittelt die Gesamtzahl der durchgeführten Prüfungen
-    progress = success_count / total_checks if total_checks > 0 else 0  # vor allem für Visualisierung
+    error_records = sum(res["result"].get("unexpected_count", 0) for res in results_dict["results"])
+    success_count = sum(res.get("success", False) for res in results_dict["results"])
+    total_checks = len(results_dict["results"])
+    progress = success_count / total_checks if total_checks > 0 else 0
 
-    # Medaille-Status basierend auf der Anzahl erfolgreicher Prüfungen
     if success_count >= 6:
         status, color, progress = "🥇 Gold", "gold", 1.0
     elif success_count >= 4:
@@ -89,7 +66,6 @@ with col1:
     else:
         status, color = "❌ Keine Auszeichnung", "red"
 
-    # --- Testergebnisse umbenennen, für Tabelle ---
     expectation_to_name = {
         ("expect_column_values_to_not_be_null", "Transaction ID"): "Transaktion ID nicht null",
         ("expect_column_values_to_be_unique", "Transaction ID"): "Transaktion ID eindeutig",
@@ -99,25 +75,18 @@ with col1:
         ("expect_column_values_to_match_regex", "Transaction Date"): "Datum YYYY-MM-DD",
     }
 
-
     test_results = [
-            {
-                # Liest den passenden Namen der Erwartung aus dem Mapping
-                "Test": expectation_to_name.get(
-                    (res["expectation_config"]["type"], res["expectation_config"]["kwargs"].get("column", "")),
-                    f"Unbekannte Prüfung ({res['expectation_config']['type']})"
-                ),
-                # Speichert den Status als Häkchen (erfolgreich) oder Kreuz (fehlgeschlagen)
-                "Status": "✅" if res.get("success", False) else "❌",
-                # Anzahl der fehlerhaften (unerwarteten) Werte für diesen Test
-                "Fehler": res.get("result", {}).get("unexpected_count", 0)
-            }
-            # Schleife über alle Validierungsergebnisse
-            for res in results_dict.get("results", [])
-        ]   
+        {
+            "Test": expectation_to_name.get(
+                (res["expectation_config"]["type"], res["expectation_config"]["kwargs"].get("column", "")),
+                f"Unbekannte Prüfung ({res['expectation_config']['type']})"
+            ),
+            "Status": "✅" if res.get("success", False) else "❌",
+            "Fehler": res.get("result", {}).get("unexpected_count", 0)
+        }
+        for res in results_dict.get("results", [])
+    ]
 
-
-# Visualisierung der Testergebnisse und ein bisschen html bzw css für die Darstellung
     sub_col1, sub_col2 = st.columns([75, 25])
     sub_col1.table(pd.DataFrame(test_results))
 
@@ -130,23 +99,15 @@ with col1:
             <p style="text-align: center;">{success_count}/6 Tests</p>
         """, unsafe_allow_html=True)
 
-
-# ----------------------------------- Rechte Spalte ------------------------------------------#
-# Darstellung von Kennzahlen und Diagrammen zur Datenqualität.
-# Es werden prozentuale Anteile fehlerhafter Datensätze und Zeilen mit fehlenden Werten berechnet
-# und anschließend als Kreisdiagramme sowie Balkendiagramme visualisiert.
 with col2:
     st.markdown("#### Kennzahlen und Diagramme:")
 
-    # Berechnung der relativen Anteile von fehlerhaften Datensätzen und Zeilen mit fehlenden Werten
     error_percentage = round((error_records / len(df)) * 100, 1)
     empty_rows = df.isnull().any(axis=1).sum()
     empty_rows_percentage = round((empty_rows / len(df)) * 100, 1)
 
-    # Unterteilung der rechten Spalte in zwei Diagrammspalten
     sub_colr1, sub_colr2 = st.columns(2)
 
-    # Visualisiert den prozentualen Anteil fehlerhafter Datensätze als Donut-Diagramm für relative Darstellung mit konkreter Prozentzahl
     with sub_colr1:
         fig = go.Figure(go.Pie(
             values=[error_percentage, 100 - error_percentage],
@@ -156,7 +117,7 @@ with col2:
             textinfo='none'
         ))
         fig.update_layout(
-            title=dict(text="Anteil fehlerhafter Datensätze (%)", font=dict(size=14), x=0.5, xanchor='center', yanchor='top'),
+            title=dict(text="Anteil fehlerhafter Datensätze (%)", font=dict(size=14), x=0.5),
             annotations=[dict(text=f"{error_percentage}%", x=0.5, y=0.5, font_size=24, showarrow=False)],
             showlegend=False,
             margin=dict(t=40, b=20, l=0, r=0),
@@ -164,12 +125,11 @@ with col2:
             height=200,
         )
         fig.update_traces(
-            hovertemplate='%{label}: %{value}%',  # Zeigt beim Hover den Anteil an
+            hovertemplate='%{label}: %{value}%',
             textinfo='none'
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    # Visualisiert den prozentualen Anteil von Zeilen mit fehlenden Werten (NaNs) als Donut-Diagramm
     with sub_colr2:
         fig_empty = go.Figure(go.Pie(
             values=[empty_rows_percentage, 100 - empty_rows_percentage],
@@ -179,7 +139,7 @@ with col2:
             textinfo='none'
         ))
         fig_empty.update_layout(
-            title=dict(text="Anteil Zeilen mit fehlenden Werten (%)", font=dict(size=14), x=0.5, xanchor='center', yanchor='top'),
+            title=dict(text="Anteil Zeilen mit fehlenden Werten (%)", font=dict(size=14), x=0.5),
             annotations=[dict(text=f"{empty_rows_percentage}%", x=0.5, y=0.5, font_size=24, showarrow=False)],
             showlegend=False,
             margin=dict(t=40, b=20, l=0, r=0),
@@ -187,13 +147,11 @@ with col2:
             height=200,
         )
         fig_empty.update_traces(
-            hovertemplate='%{label}: %{value}%',    
+            hovertemplate='%{label}: %{value}%',
             textinfo='none'
         )
         st.plotly_chart(fig_empty, use_container_width=True)
 
-    # --- Fehlende Werte pro Spalte ---
-    # Berechnet und visualisiert den Prozentsatz fehlender Werte pro Spalte als Balkendiagramm.
     missing_percent = (df.isna().sum() / len(df)) * 100
     missing_percent = missing_percent[missing_percent > 0]
 
