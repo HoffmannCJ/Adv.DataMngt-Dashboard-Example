@@ -1,5 +1,4 @@
 pandas
 streamlit
-great_expectations
 plotly
 kagglehub
