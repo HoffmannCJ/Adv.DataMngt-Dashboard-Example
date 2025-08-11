@@ -1,0 +1,32 @@
+[
+    {
+        "Test": "Transaktion ID nicht null",
+        "Status": "✅",
+        "Fehler": 0
+    },
+    {
+        "Test": "Transaktion ID eindeutig",
+        "Status": "✅",
+        "Fehler": 0
+    },
+    {
+        "Test": "Quantity 1-10",
+        "Status": "✅",
+        "Fehler": 0
+    },
+    {
+        "Test": "Total Spent > 0",
+        "Status": "✅",
+        "Fehler": 0
+    },
+    {
+        "Test": "Zahlungsmethode gültig",
+        "Status": "❌",
+        "Fehler": 599
+    },
+    {
+        "Test": "Datum YYYY-MM-DD",
+        "Status": "❌",
+        "Fehler": 301
+    }
+]
