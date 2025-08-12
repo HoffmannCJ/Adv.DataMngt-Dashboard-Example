@@ -1,6 +1,5 @@
 import pandas as pd                 # Für Datenanalyse und -manipulation (Umgang mit DataFrames)
-import streamlit as st              # Für die Erstellung von Webanwendungen im Bereich Data Science
-import great_expectations as gx     # Für Datenqualitätsprüfungen und Validierungen von Datensätzen
+import streamlit as st              # Für die Erstellung von Webanwendungen im Bereich Data Science   # Für Datenqualitätsprüfungen und Validierungen von Datensätzen
 import plotly.graph_objects as go   # Für interaktive Diagramme und Visualisierungen (Graph Objects)
 import kagglehub                    # Download von Datensätzen via KaggleHub
 import shutil                       # Datei- und Ordneroperationen
